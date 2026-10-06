@@ -168,12 +168,15 @@ public class TSecreCarrierServiceImpl extends ServiceImpl<TSecreCarrierMapper, T
         List<TSecreCarrier> carriers = this.baseMapper.selectList(new QueryWrapper<TSecreCarrier>()
                 .eq("del_flag", 0)
                 .isNotNull("warn_level"));
-        // 发问那一刻的在位名单直接取自唯一口径那一回计算，挑单不许另捋一把尺子
+        // 发问那一刻的在位名单直接取自唯一口径那一回计算，挑单不许另捋一把尺子。
+        // 同一线代号重发过几版、同一天又都在位时，只认裁决名单里头一次出现的那一条
+        // ——与挂钉时 activeAt 取的那条同一取法（交班次序、线代号定先后，并列保稳定序）。
+        // 绝不能逐条 put 让后到的一版盖掉前头那版，否则照规矩钉的甲版会被乙版比成张冠李戴。
         java.util.Map<String, TSecreWarnLine> activeByCode =
                 new java.util.HashMap<String, TSecreWarnLine>();
         for (TSecreWarnLine r : secreWarnLineService.listAvailable(at)) {
             if (r.getRuleCode() != null) {
-                activeByCode.put(r.getRuleCode(), r);
+                activeByCode.putIfAbsent(r.getRuleCode(), r);
             }
         }
         for (TSecreCarrier c : carriers) {

@@ -226,6 +226,28 @@ public class TSecreCarrierServiceTest {
         assertTrue(byId(stale, 11L).getReasonText().contains("已撤下"));
     }
 
+    /**
+     * 挑单那一手：同一代号重发过一版、两版起用日不同却同一天都在位时，
+     * 挂钉与挑单认的是同一版——都取裁决名单（交班次序、线代号）里的头一条（甲版）。
+     * 挑单不得因册里多出乙版，就把照甲版规矩钉上去的钉挑成「不在时段内、张冠李戴」。
+     */
+    @Test
+    public void staleStamps_sameCodeTwoVersionsInPositionTogether_picksSameOneAsApply() {
+        // 甲版年初起用、乙版年中起用，交班格都空着：发问那天两版同日在位
+        lineArchive.add(line("R", "2025-01-01 00:00:00", null, 0, "30", "45", "60"));
+        lineArchive.add(line("R", "2025-06-01 00:00:00", null, 0, "30", "45", "60"));
+
+        TSecreCarrier c = carrier(16L, 1, "R", "2025-01-01 00:00:00");
+        List<TSecreCarrier> rows = new ArrayList<TSecreCarrier>();
+        rows.add(c);
+        when(carrierMapper.selectList(any(Wrapper.class))).thenReturn(rows);
+
+        List<StaleWarnStamp> stale =
+                carrierService.listStaleWarnStamp(t("2025-06-15 08:00:00"));
+        assertTrue(stale.stream().noneMatch(s -> Long.valueOf(16L).equals(s.getCarrierId())),
+                "照在位头一条（甲版）钉的好件不该被乙版比成张冠李戴");
+    }
+
     private static StaleWarnStamp byId(List<StaleWarnStamp> list, long id) {
         for (StaleWarnStamp s : list) {
             if (s.getCarrierId() == id) {
