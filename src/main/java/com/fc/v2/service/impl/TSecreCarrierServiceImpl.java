@@ -168,11 +168,14 @@ public class TSecreCarrierServiceImpl extends ServiceImpl<TSecreCarrierMapper, T
         List<TSecreCarrier> carriers = this.baseMapper.selectList(new QueryWrapper<TSecreCarrier>()
                 .eq("del_flag", 0)
                 .isNotNull("warn_level"));
-        // 发问那一刻的在位名单直接取自唯一口径那一回计算，挑单不许另捋一把尺子
+        // 发问那一刻的在位名单直接取自唯一口径那一回计算，挑单不许另捋一把尺子。
+        // 名单已按交班次序、线代号排定：同一代号重发过几版、同日都在位时，每个代号排在
+        // 头里的那条就是挂钉当口 activeAt 定出来的那一版（与挂钉同一取法）。只许先到的
+        // 占位——put 覆盖会把排在后头的另一版当成在位版，照规矩打的钉反被点成张冠李戴。
         java.util.Map<String, TSecreWarnLine> activeByCode =
                 new java.util.HashMap<String, TSecreWarnLine>();
         for (TSecreWarnLine r : secreWarnLineService.listAvailable(at)) {
-            if (r.getRuleCode() != null) {
+            if (r.getRuleCode() != null && !activeByCode.containsKey(r.getRuleCode())) {
                 activeByCode.put(r.getRuleCode(), r);
             }
         }

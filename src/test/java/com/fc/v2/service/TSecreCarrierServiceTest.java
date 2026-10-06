@@ -226,6 +226,38 @@ public class TSecreCarrierServiceTest {
         assertTrue(byId(stale, 11L).getReasonText().contains("已撤下"));
     }
 
+    /**
+     * 同一条线重发过一版、两版同日都在位：挂钉与挑单认的是同一版——都按交班次序与线代号
+     * 裁决出来的头一条。甲版年初起用、乙版年中起用，当日两版都在位，挂的钉算甲版的，
+     * 挑单回头也拿甲版比，不得因册里多一版把照规矩打的钉挑成「不在时段内、张冠李戴」。
+     */
+    @Test
+    public void staleCheck_sameCodeTwoVersionsSameWinnerAsStamped() {
+        lineArchive.add(line("R", "2025-01-01 00:00:00", null, 0, "30", "45", "60")); // 甲版：年初
+        lineArchive.add(line("R", "2025-06-01 00:00:00", null, 0, "30", "45", "60")); // 乙版：年中
+        TSecreCarrier c = carrier(16L, null, null, null);
+        when(carrierMapper.selectOne(any(Wrapper.class))).thenReturn(c);
+        doAnswer(inv -> {
+            applyPatch(c, inv.getArgument(1));
+            return 1;
+        }).when(carrierMapper).update(org.mockito.ArgumentMatchers.isNull(), any(Wrapper.class));
+
+        Date at = t("2025-09-01 08:00:00");
+        WarnLevelResult stamped = carrierService.applyWarn(16L, new BigDecimal("30"), at);
+        assertEquals("R", stamped.getRuleCode());
+        // 挂钉认裁决头一条那版（甲版，年初那一日起用）
+        assertEquals("2025-01-01 00:00:00",
+                new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(c.getWarnEffDate()));
+
+        List<TSecreCarrier> rows = new ArrayList<TSecreCarrier>();
+        rows.add(c);
+        when(carrierMapper.selectList(any(Wrapper.class))).thenReturn(rows);
+
+        // 挑单取在位那一条与挂钉同取法：好钉不得进单
+        List<StaleWarnStamp> stale = carrierService.listStaleWarnStamp(at);
+        assertTrue(stale.isEmpty(), "照规矩打的钉不该被挑成张冠李戴");
+    }
+
     private static StaleWarnStamp byId(List<StaleWarnStamp> list, long id) {
         for (StaleWarnStamp s : list) {
             if (s.getCarrierId() == id) {
